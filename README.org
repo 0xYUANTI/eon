@@ -142,6 +142,7 @@ eon_type.erl!
 alias types
 list types
 sum types
+check_term
 &c.
 
 * Manifest
