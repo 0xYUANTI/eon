@@ -1,0 +1,5 @@
+{application, eon, [ {description,  "EON"}
+                   , {vsn,          git}
+                   , {registered,   []}
+                   , {applications, [kernel, stdlib]}
+                   ]}.
