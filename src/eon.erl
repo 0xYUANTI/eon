@@ -19,6 +19,7 @@
         , equal/2
         , get/2
         , get/3
+        , get_/2
         , is_empty/1
         , is_key/2
         , keys/1
@@ -157,11 +158,22 @@ get(Obj, Key, Default) ->
     error     -> Default
   end.
 
+-spec get_(object(A, B), A) -> B | no_return().
+%% @doc get(Obj, Key) is the value associated with Key in Obj,
+%% or an exception if no such value exists.
+get_(Obj, Key) ->
+  case dict:find(Key, new(Obj)) of
+    {ok, Res} -> Res;
+    error     -> throw({notfound, Key})
+  end.
+
 get_test() ->
   {error, notfound} = get(new(), foo),
   bar               = get(new(), foo, bar),
   {ok, bar}         = get(set(new(), foo, bar), foo),
-  bar               = get(set(new(), foo, bar), foo, baz).
+  bar               = get(set(new(), foo, bar), foo, baz),
+  1                 = (catch get_([foo, 1], foo)),
+  {notfound, foo}   = (catch get_(new(), foo)).
 
 
 -spec is_empty(object(_, _)) -> boolean().
