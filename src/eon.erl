@@ -164,16 +164,16 @@ get(Obj, Key, Default) ->
 get_(Obj, Key) ->
   case dict:find(Key, new(Obj)) of
     {ok, Res} -> Res;
-    error     -> throw({error, {notfound, Key}})
+    error     -> throw({error, notfound})
   end.
 
 get_test() ->
-  {error, notfound}        = get(new(), foo),
-  bar                      = get(new(), foo, bar),
-  {ok, bar}                = get(set(new(), foo, bar), foo),
-  bar                      = get(set(new(), foo, bar), foo, baz),
-  1                        = get_([foo, 1], foo),
-  {error, {notfound, foo}} = ?lift(get_(new(), foo)).
+  {error, notfound} = get(new(), foo),
+  bar               = get(new(), foo, bar),
+  {ok, bar}         = get(set(new(), foo, bar), foo),
+  bar               = get(set(new(), foo, bar), foo, baz),
+  1                 = get_([foo, 1], foo),
+  {error, notfound} = ?lift(get_(new(), foo)).
 
 
 -spec is_empty(object(_, _)) -> boolean().
