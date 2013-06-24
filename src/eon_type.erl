@@ -254,7 +254,7 @@ typecheck(#spec{term=Term0, type=Type, p_have=P_have}) ->
       Term = Type:normalize(Term0, P_have),
       case Type:validate(Term, P_have) of
         true  -> Type:convert(Term, P_have);
-        false -> throw({error, {validate, Type:name()}})
+        false -> throw({error, {validate, Type:name(), Term}})
       end;
     eon_type_rec ->
       ?unlift(check_obj(Term0, Type:decl(Term0, P_have)));
@@ -346,8 +346,8 @@ check_test() ->
             , bar, [0,1,1,0]
             ]
     ],
-  {error, {untypable, [ {foo, {validate, int_range}}
-                      , {baz, {validate, int_range}}
+  {error, {untypable, [ {foo, {validate, int_range, 43}}
+                      , {baz, {validate, int_range, 10}}
                       ]}} = check_obj(Obj1, Decl1),
 
   %% Missing parameters
