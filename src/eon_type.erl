@@ -9,6 +9,8 @@
 %%%_* Exports ==========================================================
 -export([ check_obj/2
         , check_term/2
+        , get_error/2
+        , raise/1
         ]).
 
 %%%_* Includes =========================================================
@@ -51,6 +53,15 @@ check_term(Term, Spec) ->
   s2_maybe:do([ ?thunk(check_obj([term,Term], [term,Spec]))
               , fun(Obj) -> eon:get(Obj, term) end
               ]).
+
+get_error(key,  {K, _, _, _, _                 }) -> K;
+get_error(type, {_, T, _, _, _                 }) -> T;
+get_error(name, {_, _, N, _, _                 }) -> N;
+get_error(term, {_, _, _, T, _                 }) -> T;
+get_error(rsn,  {_, _, _, _, {lifted_exn, R, _}}) -> R;
+get_error(rsn,  {_, _, _, _, R                 }) -> R.
+
+raise(Err) -> throw({error, Err}).
 
 %%%_ * Parsing ---------------------------------------------------------
 -spec parse(obj(A, _), decl(A)) -> [obj(A, #spec{})].
@@ -241,11 +252,11 @@ reduce_spec(Key, Spec, _Obj) ->
 
 is_parameterized(#spec{p_need=P_need}) -> eon:is_empty(P_need).
 
-type(Key, #spec{term=_Term, type=_Type, p_have=_P_have} = Spec) ->
-  ?debug("~p :: ~p(~p)", [_Term, _Type, _P_have]),
+type(Key, #spec{term=Term, type=Type, p_have=_P_have} = Spec) ->
+  ?debug("~p :: ~p(~p)", [Term, Type, _P_have]),
   case ?lift(typecheck(Spec)) of
     {ok, Val}    -> Val;
-    {error, Rsn} -> throw({error, {Key, Rsn}})
+    {error, Rsn} -> throw({error, {Key, Type, Type:name(), Term, Rsn}})
   end.
 
 typecheck(#spec{term=Term0, type=Type, p_have=P_have}) ->
@@ -254,7 +265,7 @@ typecheck(#spec{term=Term0, type=Type, p_have=P_have}) ->
       Term = Type:normalize(Term0, P_have),
       case Type:validate(Term, P_have) of
         true  -> Type:convert(Term, P_have);
-        false -> throw({error, {validate, Type:name(), Term}})
+        false -> throw({error, validate})
       end;
     eon_type_rec ->
       ?unlift(check_obj(Term0, Type:decl(Term0, P_have)));
@@ -346,8 +357,8 @@ check_test() ->
             , bar, [0,1,1,0]
             ]
     ],
-  {error, {untypable, [ {foo, {validate, int_range, 43}}
-                      , {baz, {validate, int_range, 10}}
+  {error, {untypable, [ {foo, test_prim, int_range, 43, validate}
+                      , {baz, test_prim, int_range, 10, validate}
                       ]}} = check_obj(Obj1, Decl1),
 
   %% Missing parameters
@@ -367,6 +378,21 @@ check_test() ->
   {error, {untypable, [{missing_params, [{quux, test_rec, [foo]}]}]}} =
     check_obj(Obj2, Decl2),
 
+  ok.
+
+raise_test() ->
+  {error, {untypable, [Err]}} =
+    check_obj([{meh, abc}], [meh, test_raise]),
+  myexn = get_error(rsn, Err).
+
+error_test() ->
+  {error, {untypable, [Err]}} =
+    check_obj([{foo, 666}], [foo, {test_prim, [max, 50]}]),
+  foo       = get_error(key,  Err),
+  test_prim = get_error(type, Err),
+  int_range = get_error(name, Err),
+  666       = get_error(term, Err),
+  validate  = get_error(rsn,  Err),
   ok.
 
 cover_test() ->
