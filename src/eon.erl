@@ -292,7 +292,7 @@ fold_test() ->
 %% @doc union(Obj1, Obj2) is Obj1 plus any entries from Obj2 whose keys
 %% do not occur in Obj1.
 union(Obj1, Obj2) ->
-  orddict:merge(fun(_K, V1, _V2) -> V1 end, new(Obj1), new(Obj2)).
+  lists:ukeymerge(1, lists:ukeysort(1,new(Obj1)), lists:ukeysort(1,new(Obj2))).
 
 union_test() ->
   ?assertObjEq([foo,1, bar,2, baz,3],
