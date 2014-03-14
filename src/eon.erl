@@ -155,10 +155,8 @@ get(Obj, Key, Default) ->
 %% @doc get(Obj, Key) is the value associated with Key in Obj,
 %% or an exception if no such value exists.
 get_(Obj, Key) ->
-  case get(Obj, Key) of
-    {ok, Res}         -> Res;
-    {error, notfound} -> throw({error, notfound})
-  end.
+  {ok, Res} = get(Obj, Key),
+  Res.
 
 get_test() ->
   {error, notfound} = get(new(), foo),
@@ -166,7 +164,8 @@ get_test() ->
   {ok, bar}         = get(set(new(), foo, bar), foo),
   bar               = get(set(new(), foo, bar), foo, baz),
   1                 = get_([foo, 1], foo),
-  {error, notfound} = ?lift(get_(new(), foo)).
+  {error, {lifted_exn, {badmatch, {error, notfound}}, _}}
+                    = ?lift(get_(new(), foo)).
 
 
 -spec is_empty(object(_, _)) -> boolean().
