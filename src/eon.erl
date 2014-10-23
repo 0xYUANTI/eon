@@ -49,6 +49,7 @@
 
 %% Types
 -export_type([ literal/2
+             , object/0
              , object/2
              ]).
 
@@ -62,7 +63,8 @@
 
 %%%_* Code =============================================================
 %%%_ * Types -----------------------------------------------------------
--type object(A, B)  :: dict:dict(A, B)
+-type object()      :: orddict:orddict().
+-type object(A, B)  :: orddict:orddict()
                      | [{A, B}]
                      | literal(A, B).
 
@@ -75,18 +77,12 @@
 %%%_ * Constructors ----------------------------------------------------
 -spec new() -> object(_, _).
 %% @doc new() is a fresh object.
-new() -> dict:new().
+new() -> orddict:new().
 
 -spec new(object(A, B)) -> object(A, B).
 %% @doc new(Obj) is the canonical representation of Obj.
-new(X) when is_tuple(X) ->
-  X; %common case
-new([X|_] = Xs) when is_tuple(X) ->
-  try dict:from_list(Xs)
-  catch _:_ -> dict:from_list(partition(Xs))
-  end;
-new(Xs) when is_list(Xs) ->
-  dict:from_list(partition(Xs)).
+new([X|_] = Xs) when is_tuple(X) -> Xs;
+new(Xs) when is_list(Xs)         -> orddict:from_list(partition(Xs)).
 
 partition(KVs) ->
   ?hence(0 =:= length(KVs) rem 2),
@@ -96,7 +92,7 @@ partition(KVs) ->
 %% @doc new(Obj, Pred) is the canonical representation of Obj iff Pred
 %% returns true for all entries.
 new(X, Pred) ->
-  dict:map(
+  orddict:map(
     fun(K, V) ->
       if is_function(Pred, 1) -> Pred(V);
          is_function(Pred, 2) -> Pred(K, V)
@@ -107,11 +103,10 @@ new(X, Pred) ->
 new_test() ->
   _           = new(),
 
-  _           = new(dict:store(foo, 42, dict:store(bar, 666, dict:new()))),
+  _           = new(orddict:store(foo, 42, orddict:store(bar, 666, orddict:new()))),
   _           = new([{foo, 42}, {bar, 666}]),
   _           = new([{foo, bar},baz]),
   _           = new([foo,42, bar,666]),
-  {error, _}  = (catch new([{foo, bar},baz, snarf])),
   {error, _}  = (catch new([foo,bar, baz])),
   {'EXIT', _} = (catch new(42)),
 
@@ -121,7 +116,7 @@ new_test() ->
 %%%_ * Basics ----------------------------------------------------------
 -spec del(object(A, B), A) -> object(A, B).
 %% @doc del(Obj, Key) is Obj with the entry for Key removed.
-del(Obj, Key) -> dict:erase(Key, new(Obj)).
+del(Obj, Key) -> lists:keydelete(Key, 1, new(Obj)).
 
 del_test() ->
   Nil = new(),
@@ -131,9 +126,7 @@ del_test() ->
 
 -spec equal(object(_, _), object(_, _)) -> boolean().
 %% @doc equal(Obj1, Obj2) is true iff Obj1 matches Obj2.
-equal(Obj1, Obj2) ->
-  lists:sort(dict:to_list(new(Obj1))) =:=
-  lists:sort(dict:to_list(new(Obj2))).
+equal(Obj1, Obj2) -> lists:sort(new(Obj1)) =:= lists:sort(new(Obj2)).
 
 equal_test() ->
   true  = equal(new(), new()),
@@ -144,28 +137,26 @@ equal_test() ->
 %% @doc get(Obj, Key) is the value associated with Key in Obj,
 %% or an error if no such value exists.
 get(Obj, Key) ->
-  case dict:find(Key, new(Obj)) of
-    {ok, _} = Ok -> Ok;
-    error        -> {error, notfound}
+  case lists:keyfind(Key, 1, new(Obj)) of
+    {Key, Val} -> {ok, Val};
+    false      -> {error, notfound}
   end.
 
 -spec get(object(A, B), A, B) -> B.
 %% @doc get(Obj, Key, Default) is the value associated with Key in Obj,
 %% or Default if no such value exists.
 get(Obj, Key, Default) ->
-  case dict:find(Key, new(Obj)) of
-    {ok, Val} -> Val;
-    error     -> Default
+  case get(Obj, Key) of
+    {ok, Res}         -> Res;
+    {error, notfound} -> Default
   end.
 
 -spec get_(object(A, B), A) -> B | no_return().
 %% @doc get(Obj, Key) is the value associated with Key in Obj,
 %% or an exception if no such value exists.
 get_(Obj, Key) ->
-  case dict:find(Key, new(Obj)) of
-    {ok, Res} -> Res;
-    error     -> throw({error, notfound})
-  end.
+  {ok, Res} = get(Obj, Key),
+  Res.
 
 get_test() ->
   {error, notfound} = get(new(), foo),
@@ -173,7 +164,8 @@ get_test() ->
   {ok, bar}         = get(set(new(), foo, bar), foo),
   bar               = get(set(new(), foo, bar), foo, baz),
   1                 = get_([foo, 1], foo),
-  {error, notfound} = ?lift(get_(new(), foo)).
+  {error, {lifted_exn, {badmatch, {error, notfound}}, _}}
+                    = ?lift(get_(new(), foo)).
 
 
 -spec is_empty(object(_, _)) -> boolean().
@@ -188,7 +180,7 @@ is_empty_test() ->
 -spec is_key(object(A, _), A) -> boolean().
 %% @doc is_key(Obj, Key) is true iff there is a value associated with
 %% Key in Obj.
-is_key(Obj, Key) -> dict:is_key(Key, new(Obj)).
+is_key(Obj, Key) -> lists:keymember(Key, 1, new(Obj)).
 
 is_key_test() ->
   false = is_key(new(), foo),
@@ -197,7 +189,7 @@ is_key_test() ->
 
 -spec keys(object(A, _)) -> [A].
 %% @doc keys(Obj) is a list of all keys in Obj.
-keys(Obj) -> [K || {K, _} <- dict:to_list(new(Obj))].
+keys(Obj) -> [K || {K, _} <- new(Obj)].
 
 keys_test() ->
   [] = keys(new()).
@@ -206,7 +198,7 @@ keys_test() ->
 -spec set(object(A, B), A, B) -> object(A, B).
 %% @doc set(Obj, Key, Val) is an object which is identical to Obj
 %% execept that it maps Key to Val.
-set(Obj, Key, Val) -> dict:store(Key, Val, new(Obj)).
+set(Obj, Key, Val) -> lists:keystore(Key, 1, new(Obj), {Key, Val}).
 
 set_test() ->
   ?assertObjEq(set(new(), foo, bar),
@@ -215,7 +207,7 @@ set_test() ->
 
 -spec size(object(_, _)) -> non_neg_integer().
 %% @doc size(Obj) is the number of mappings in Obj.
-size(Obj) -> dict:size(new(Obj)).
+size(Obj) -> orddict:size(new(Obj)).
 
 size_test() ->
   0 = size(new()),
@@ -224,7 +216,7 @@ size_test() ->
 
 -spec vals(object(A, _)) -> [A].
 %% @doc vals(Obj) is a list of all values in Obj.
-vals(Obj) -> [V || {_, V} <- dict:to_list(new(Obj))].
+vals(Obj) -> [V || {_, V} <- new(Obj)].
 
 vals_test() ->
   Vs   = vals([foo,1, bar,2]),
@@ -238,7 +230,7 @@ vals_test() ->
 %% Obj1 and Obj2 must have the same set of keys.
 zip(Obj1, Obj2) ->
   ?hence(lists:sort(keys(Obj1)) =:= lists:sort(keys(Obj2))),
-  dict:merge(fun(_K, V1, V2) -> {V1, V2} end, new(Obj1), new(Obj2)).
+  orddict:merge(fun(_K, V1, V2) -> {V1, V2} end, new(Obj1), new(Obj2)).
 
 zip_test() ->
   ?assertObjEq([foo,{bar, baz}],
@@ -248,7 +240,7 @@ zip_test() ->
 -spec map(func(C), object(A, _)) -> object(A, C).
 %% @doc map(F, Obj) is the result of mapping F over Obj's entries.
 map(F, Obj) ->
-  dict:map(
+  orddict:map(
     fun(K, V) ->
       if is_function(F, 1) -> F(V);
          is_function(F, 2) -> F(K, V)
@@ -266,7 +258,7 @@ map_test() ->
 %% @doc filter(F, Obj) is the subset of entries in Obj for which Pred
 %% returns true.
 filter(Pred, Obj) ->
-  dict:filter(
+  orddict:filter(
     fun(K, V) ->
       if is_function(Pred, 1) -> Pred(V);
          is_function(Pred, 2) -> Pred(K, V)
@@ -283,8 +275,8 @@ filter_test() ->
 -spec fold(fun(), A, object(_, _)) -> A.
 %% @doc fold(F, Acc0, Obj) is Obj reduced to Acc0 via F.
 fold(F, Acc0, Obj) ->
-  dict:fold(
-    fun(K, V, Acc) ->
+  lists:foldl(
+    fun({K, V}, Acc) ->
       if is_function(F, 2) -> F(V, Acc);
          is_function(F, 3) -> F(K, V, Acc)
       end
@@ -299,7 +291,7 @@ fold_test() ->
 %% @doc union(Obj1, Obj2) is Obj1 plus any entries from Obj2 whose keys
 %% do not occur in Obj1.
 union(Obj1, Obj2) ->
-  dict:merge(fun(_K, V1, _V2) -> V1 end, new(Obj1), new(Obj2)).
+  lists:ukeymerge(1, lists:ukeysort(1,new(Obj1)), lists:ukeysort(1,new(Obj2))).
 
 union_test() ->
   ?assertObjEq([foo,1, bar,2, baz,3],
@@ -310,7 +302,7 @@ union_test() ->
 %% @doc difference(Obj1, Obj2) is Obj1 with all entries whose keys occur
 %% in Obj2 removed.
 difference(Obj1, Obj2) ->
-  dict:filter(fun(K, _V) -> not dict:is_key(K, new(Obj2)) end, new(Obj1)).
+  orddict:filter(fun(K, _V) -> not is_key(new(Obj2), K) end, new(Obj1)).
 
 difference_test() ->
   ?assertObjEq(new(),
@@ -321,7 +313,7 @@ difference_test() ->
 %% @doc intersection(Obj1, Obj2) is Obj1 with all entries whose keys do
 %% not occur in Obj2 removed.
 intersection(Obj1, Obj2) ->
-  dict:filter(fun(K, _V) -> dict:is_key(K, new(Obj2)) end, new(Obj1)).
+  orddict:filter(fun(K, _V) -> is_key(new(Obj2), K) end, new(Obj1)).
 
 intersection_test() ->
   ?assertObjEq([bar,2],
@@ -332,7 +324,7 @@ intersection_test() ->
 
 -spec make(object(_, _)) -> iterator().
 %% @doc make(Obj) is an iterator for Obj.
-make(Obj)                -> dict:to_list(new(Obj)).
+make(Obj)                -> new(Obj).
 
 -spec next(iterator())   -> {_, iterator()}.
 %% @doc next(It0) is the next entry in iterator It0 and the updated
