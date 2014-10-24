@@ -9,49 +9,46 @@
 
 %%%_* Exports ==========================================================
 %% Constructors
--export([ new/0
-        , new/1
-        , new/2
-        ]).
+-export([new/0]).
+-export([new/1]).
+-export([new/2]).
 
 %% Basics
--export([ del/2
-        , equal/2
-        , get/2
-        , get/3
-        , get_/2
-        , is_empty/1
-        , is_key/2
-        , keys/1
-        , set/3
-        , size/1
-        , vals/1
-        , zip/2
-        ]).
+-export([del/2]).
+-export([equal/2]).
+-export([get/2]).
+-export([get/3]).
+-export([get_/2]).
+-export([dget/2]).
+-export([dget/3]).
+-export([dget_/2]).
+-export([is_empty/1]).
+-export([is_key/2]).
+-export([keys/1]).
+-export([set/3]).
+-export([size/1]).
+-export([vals/1]).
+-export([zip/2]).
 
 %% Higher-order
--export([ filter/2
-        , fold/3
-        , map/2
-        ]).
+-export([filter/2]).
+-export([fold/3]).
+-export([map/2]).
 
 %% Sets
--export([ difference/2
-        , intersection/2
-        , union/2
-        ]).
+-export([difference/2]).
+-export([intersection/2]).
+-export([union/2]).
 
 %% Iterators
--export([ done/1
-        , make/1
-        , next/1
-        ]).
+-export([done/1]).
+-export([make/1]).
+-export([next/1]).
 
 %% Types
--export_type([ literal/2
-             , object/0
-             , object/2
-             ]).
+-export_type([literal/2]).
+-export_type([object/0]).
+-export_type([object/2]).
 
 %%%_* Includes =========================================================
 -include("eon.hrl").
@@ -69,7 +66,7 @@
                      | literal(A, B).
 
 -type literal(A, B) :: [A | B].
-
+-type deep_key()    :: binary() | list().
 
 -type func(A)       :: fun((_, _) -> A)
                      | fun((_)    -> A).
@@ -89,7 +86,7 @@ partition(KVs) ->
   [{K, V} || [K, V] <- s2_lists:partition(2, KVs)].
 
 -spec new(object(A, B), func(boolean())) -> object(A, B).
-%% @doc new(Obj, Pred) is the canonical representation of Obj iff Pred
+%% @doc new(Obj, Pred) is the canonical representation of Obj if Pred
 %% returns true for all entries.
 new(X, Pred) ->
   orddict:map(
@@ -103,7 +100,9 @@ new(X, Pred) ->
 new_test() ->
   _           = new(),
 
-  _           = new(orddict:store(foo, 42, orddict:store(bar, 666, orddict:new()))),
+  _           = new(orddict:store( foo
+                                 , 42
+                                 , orddict:store(bar, 666, orddict:new())) ),
   _           = new([{foo, 42}, {bar, 666}]),
   _           = new([{foo, bar},baz]),
   _           = new([foo,42, bar,666]),
@@ -126,6 +125,7 @@ del_test() ->
 
 -spec equal(object(_, _), object(_, _)) -> boolean().
 %% @doc equal(Obj1, Obj2) is true iff Obj1 matches Obj2.
+equal(Obj, Obj)   -> true;
 equal(Obj1, Obj2) -> lists:sort(new(Obj1)) =:= lists:sort(new(Obj2)).
 
 equal_test() ->
@@ -166,6 +166,50 @@ get_test() ->
   1                 = get_([foo, 1], foo),
   {error, {lifted_exn, {badmatch, {error, notfound}}, _}}
                     = ?lift(get_(new(), foo)).
+
+-spec dget(object(deep_key(), B), deep_key()) -> maybe(B, notfound).
+%% @doc dget(Obj, Key) is the value associated with the deep Key in Obj,
+%% or an error if no such value exists. A deep key is a `.`-delimetered key.
+dget(Obj, Key) ->
+    lists:foldl(fun(_, {error, notfound}=E) -> E;
+                   (K, {ok, Acc})           -> eon:get(Acc, K)
+                end, {ok, Obj}, normalize_deep_key(Key)).
+
+-spec dget(object(deep_key(), B), deep_key(), B) -> B.
+%% @doc dget(Obj, Key) is the value associated with the deep Key in Obj,
+%% or Default if no such value exists. A deep key is a `.`-delimetered key.
+dget(Obj, Key, Default) ->
+  case dget(Obj, Key) of
+    {ok, Res}         -> Res;
+    {error, notfound} -> Default
+  end.
+
+-spec dget_(object(deep_key(), B), deep_key()) -> B | no_return().
+%% @doc dget(Obj, Key) is the value associated with the deep Key in Obj,
+%% or an exception if no such value exists. A deep key is a `.`-delimetered key.
+dget_(Obj, Key) ->
+  {ok, Res} = dget(Obj, Key),
+  Res.
+
+dget_test() ->
+  P = [ {<<"one">>,   1}
+      , {<<"two">>,   [ {<<"two_one">>,   21}
+                      , {<<"two_two">>,   [{<<"two_two">>, 22}]}
+                      , {<<"two_three">>, [{ <<"two_three_one">>
+                                           , [{<<"two_three_one">>, 231}]
+                                           }]}
+                      ]}
+      , {"three",     3} ],
+  {error, notfound} = dget(P, <<"non.existent">>),
+  blarg             = dget(P, <<"non.existent">>, blarg),
+  {ok, 1}           = dget(P, <<"one">>),
+  {ok, 3}           = dget(P, "three"),
+  true              = equal(get(P, <<"two">>), dget(P, <<"two">>)),
+  {ok, 21}          = dget(P, <<"two.two_one">>),
+  {ok, 22}          = dget(P, <<"two.two_two.two_two">>),
+  {ok, 231}         = dget(P, <<"two.two_three.two_three_one.two_three_one">>),
+  {error, {lifted_exn, {badmatch, {error, notfound}}, _}}
+                    = ?lift(dget_(new(), "foo")).
 
 
 -spec is_empty(object(_, _)) -> boolean().
@@ -345,6 +389,9 @@ iterator_test() ->
  true        = Elt2 =:= {foo,1} orelse Elt2 =:= {bar,2},
  true        = Elt1 =/= Elt2,
  true        = done(It).
+%%%_* Private functions ================================================
+normalize_deep_key(K) when is_binary(K) -> binary:split(K, <<".">>, [global]);
+normalize_deep_key(K) when is_list(K)   -> string:tokens(K, ".").
 
 %%%_* Emacs ============================================================
 %%% Local Variables:

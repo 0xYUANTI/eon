@@ -1,13 +1,20 @@
 PROJECT   = eon
 
-# Options
+# Options ##############################################################
+EUNIT_OPTS = [verbose]
 ERLC_OPTS = +debug_info +nowarn_shadow_vars +warnings_as_errors
-DEPS      = stdlib2
 
-# Dependencies
+# Dependecies ##########################################################
+DEPS = stdlib2
+
 dep_stdlib2 = git://github.com/kivra/stdlib2.git master
 
-# Standard targets
+# Standard targets #####################################################
 include erlang.mk
+
+ifneq ($(wildcard test/),)
+ebin/$(PROJECT).app: $(shell find test -type f -name \*.erl)
+    $(if $(strip $?),$(call compile_erl,$?))
+endif
 
 # eof
