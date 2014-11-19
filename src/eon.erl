@@ -79,7 +79,8 @@ new() -> orddict:new().
 -spec new(object(A, B)) -> object(A, B).
 %% @doc new(Obj) is the canonical representation of Obj.
 new([X|_] = Xs) when is_tuple(X) -> Xs;
-new(Xs) when is_list(Xs)         -> orddict:from_list(partition(Xs)).
+new(Xs) when is_list(Xs)         -> orddict:from_list(partition(Xs));
+new(Xs) when is_tuple(Xs)        -> dict:to_list(Xs).
 
 partition(KVs) ->
   ?hence(0 =:= length(KVs) rem 2),
@@ -99,7 +100,7 @@ new(X, Pred) ->
 
 new_test() ->
   _           = new(),
-
+  _           = new(dict:new()),
   _           = new(orddict:store( foo
                                  , 42
                                  , orddict:store(bar, 666, orddict:new())) ),
