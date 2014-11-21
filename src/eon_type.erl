@@ -130,6 +130,7 @@ do_expand1(It0, Decl) ->
 merge({Obj, Decls}) -> [do_merge(Obj, Decl) || Decl <- Decls].
 
 do_merge(Obj, Decl) ->
+    io:format("Obj: ~p, Decl: ~p", [Obj, Decl]),
   eon:map(fun({Term, {Type, Args0}}) ->
             Args   = eon:new(Args0),
             Params = eon:new([case P of

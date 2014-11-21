@@ -275,7 +275,8 @@ vals_test() ->
 %% Obj1 and Obj2 must have the same set of keys.
 zip(Obj1, Obj2) ->
   ?hence(lists:sort(keys(Obj1)) =:= lists:sort(keys(Obj2))),
-  orddict:merge(fun(_K, V1, V2) -> {V1, V2} end, new(Obj1), new(Obj2)).
+  orddict:merge( fun(_K, V1, V2) -> {V1, V2} end
+               , lists:sort(new(Obj1)), lists:sort(new(Obj2)) ).
 
 zip_test() ->
   ?assertObjEq([foo,{bar, baz}],
