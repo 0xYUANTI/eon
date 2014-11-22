@@ -26,6 +26,7 @@
 -export([is_key/2]).
 -export([keys/1]).
 -export([set/3]).
+-export([dset/3]).
 -export([size/1]).
 -export([vals/1]).
 -export([zip/2]).
@@ -248,6 +249,41 @@ set(Obj, Key, Val) -> lists:keystore(Key, 1, new(Obj), {Key, Val}).
 set_test() ->
   ?assertObjEq(set(new(), foo, bar),
                set(new(), foo, bar)).
+
+-spec dset(object(A, B), A, B) -> object(A, B).
+%% @doc dset(Obj, Key, Val) is an object which is identical to Obj
+%% execept that it maps s deep Key to Val. A deep key is a `.`-delimetered key.
+dset(O, K, V) when is_binary(K)         -> dset(O, normalize_deep_key(K), V);
+dset(_, [], Val)                        -> Val;
+dset(Obj, [H|T]=K, Val) when is_list(K) ->
+    case get(Obj, H) of
+        {error, notfound}       -> set(Obj, H, dset(new(), T, Val));
+        {ok, O} when is_list(O) -> set(Obj, H, dset(O, T, Val));
+        {ok, _}                 -> set(Obj, H, dset(new(), T, Val))
+    end.
+
+dset_test() ->
+  P = [ {<<"one">>,   1}
+      , {<<"two">>,   [ {<<"two_one">>,   21}
+                      , {<<"two_two">>,   [{<<"two_two">>, 22}]}
+                      , {<<"two_three">>, [{ <<"two_three_one">>
+                                           , [{<<"two_three_one">>, 231}]
+                                           }]}
+                      ]}
+      , {"three",     3} ],
+
+  ?assertObjEq(union(new([{<<"non">>, [{<<"existent">>, <<"val">>}]}]), P),
+               dset(P, <<"non.existent">>, <<"val">>)),
+  ?assertObjEq(set(P, <<"one">>, 1), dset(P, <<"one">>, 1)),
+  ?assertObjEq(set(P, <<"one">>, 3), dset(P, <<"one">>, 3)),
+  ?assertObjEq(set(P, <<"two">>, 2), dset(P, <<"two">>, 2)),
+  ?assertObjEq(set( P, <<"two">>
+                  , new([ {<<"two_one">>,   666}
+                        , {<<"two_two">>,   [{<<"two_two">>,22}]}
+                        , {<<"two_three">>, [{ <<"two_three_one">>
+                                             , [{<<"two_three_one">>,231}]}
+                                            ]}
+                        ])), dset(P, <<"two.two_one">>, 666)).
 
 
 -spec size(object(_, _)) -> non_neg_integer().
