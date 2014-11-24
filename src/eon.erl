@@ -128,7 +128,7 @@ del_test() ->
 -spec equal(object(_, _), object(_, _)) -> boolean().
 %% @doc equal(Obj1, Obj2) is true iff Obj1 matches Obj2.
 equal(Obj, Obj)   -> true;
-equal(Obj1, Obj2) -> lists:sort(new(Obj1)) =:= lists:sort(new(Obj2)).
+equal(Obj1, Obj2) -> lists:sort(dsort(new(Obj1)))=:=lists:sort(dsort(new(Obj2))).
 
 equal_test() ->
   true  = equal(new(), new()),
@@ -430,6 +430,11 @@ iterator_test() ->
 %%%_* Private functions ================================================
 normalize_deep_key(K) when is_binary(K) -> binary:split(K, <<".">>, [global]);
 normalize_deep_key(K) when is_list(K)   -> string:tokens(K, ".").
+
+dsort([])                            -> [];
+dsort([{K, V} | T]) when is_list(V)  -> [{K, lists:sort(dsort(V))} | dsort(T)];
+dsort([H | T]) when is_list(H)       -> [lists:sort(dsort(H)) | dsort(T)];
+dsort([H | T])                       -> [H | dsort(T)].
 
 %%%_* Emacs ============================================================
 %%% Local Variables:
