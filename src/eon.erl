@@ -15,6 +15,7 @@
 
 %% Basics
 -export([del/2]).
+-export([ddel/2]).
 -export([equal/2]).
 -export([get/2]).
 -export([get/3]).
@@ -123,6 +124,35 @@ del_test() ->
   Nil = new(),
   Nil = del(Nil, foo),
   Nil = del(set(Nil, foo, bar), foo).
+
+-spec ddel(object(deep_key(), B), deep_key()) -> object(deep_key(), B).
+%% @doc ddel(Obj, Key) is Obj with the entry for the deep Key removed.
+%%  A deep key is a `.`-delimetered key.
+ddel(O, K) when is_binary(K)         -> ddel(O, normalize_deep_key(K));
+ddel(Obj, [H|T]=K) when is_list(K) ->
+    case get(Obj, H) of
+        {error, notfound}            -> Obj;
+        {ok, _} when length(T) =:= 0 -> del(Obj, H);
+        {ok, O} when is_list(O)      -> set(Obj, H, ddel(O, T))
+    end.
+
+ddel_test() ->
+  P = [ {<<"one">>,   1}
+      , {<<"two">>,   [ {<<"two_one">>,   21}
+                      , {<<"two_two">>,   [{<<"two_two">>, 22}]}
+                      , {<<"two_three">>, [{ <<"two_three_one">>
+                                           , [{<<"two_three_one">>, 231}]
+                                           }]}
+                      ]}
+      , {"three",     3} ],
+
+  ?assert(equal(new([{<<"one">>, 1}, {"three", 3}]), ddel(P, <<"two">>))),
+  ?assertObjEq(set( P, <<"two">>
+                  , new([ {<<"two_two">>,   [{<<"two_two">>,22}]}
+                        , {<<"two_three">>, [{ <<"two_three_one">>
+                                             , [{<<"two_three_one">>,231}]}
+                                            ]}
+                        ])), ddel(P, <<"two.two_one">>)).
 
 
 -spec equal(object(_, _), object(_, _)) -> boolean().
