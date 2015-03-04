@@ -146,7 +146,8 @@ ddel_test() ->
                       ]}
       , {"three",     3} ],
 
-  ?assert(equal(new([{<<"one">>, 1}, {"three", 3}]), ddel(P, <<"two">>))),
+  ?assertObjEq(new([{<<"one">>, 1}, {"three", 3}]), ddel(P, <<"two">>)),
+  ?assertObjEq(P, ddel(P, <<"blahblah">>)),
   ?assertObjEq(set( P, <<"two">>
                   , new([ {<<"two_two">>,   [{<<"two_two">>,22}]}
                         , {<<"two_three">>, [{ <<"two_three_one">>
