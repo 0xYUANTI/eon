@@ -241,6 +241,7 @@ dget_test() ->
   {ok, 21}          = dget(P, <<"two.two_one">>),
   {ok, 22}          = dget(P, <<"two.two_two.two_two">>),
   {ok, 231}         = dget(P, <<"two.two_three.two_three_one.two_three_one">>),
+  {ok, 231}         = dget(P, [<<"two">>, <<"two_three">>, <<"two_three_one">>, <<"two_three_one">>]),
   {error, {lifted_exn, {badmatch, {error, notfound}}, _}}
                     = ?lift(dget_(new(), "foo")).
 
@@ -305,6 +306,8 @@ dset_test() ->
 
   ?assertObjEq(union(new([{<<"non">>, [{<<"existent">>, <<"val">>}]}]), P),
                dset(P, <<"non.existent">>, <<"val">>)),
+  ?assertObjEq(union(new([{<<"non">>, [{<<"existent">>, <<"val">>}]}]), P),
+               dset(P, [<<"non">>, <<"existent">>], <<"val">>)),
   ?assertObjEq(set(P, <<"one">>, 1), dset(P, <<"one">>, 1)),
   ?assertObjEq(set(P, <<"one">>, 3), dset(P, <<"one">>, 3)),
   ?assertObjEq(set(P, <<"two">>, 2), dset(P, <<"two">>, 2)),
@@ -460,6 +463,7 @@ iterator_test() ->
  true        = done(It).
 %%%_* Private functions ================================================
 normalize_deep_key(K) when is_binary(K) -> binary:split(K, <<".">>, [global]);
+normalize_deep_key(K) when is_list(K), not is_integer(hd(K)) -> K;
 normalize_deep_key(K) when is_list(K)   -> string:tokens(K, ".").
 
 dsort([])                            -> [];
