@@ -6,16 +6,9 @@
 %%%_* Module declaration ===============================================
 -module(eon_type_alias).
 
-%%%_* Exports ==========================================================
--export([ behaviour_info/1
-        ]).
-
-%%%_* Code =============================================================
-behaviour_info(callbacks) ->
-  [ {rewrite, 0}
-  , {rewrite, 1}
-  ];
-behaviour_info(_) -> undefined.
+%%%_* Callbacks ========================================================
+-callback rewrite()                  -> {eon_type:type(), eon_type:params()}.
+-callback rewrite(eon_type:params()) -> {eon_type:type(), eon_type:params()}.
 
 %%%_* Emacs ============================================================
 %%% Local Variables:
