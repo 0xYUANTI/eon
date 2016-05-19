@@ -6,19 +6,12 @@
 %%%_* Module declaration ===============================================
 -module(eon_type_prim).
 
-%%%_* Exports ==========================================================
--export([ behaviour_info/1
-        ]).
-
-%%%_* Code =============================================================
-behaviour_info(callbacks) ->
-    [ {name,       0}
-    , {parameters, 0}
-    , {normalize,  2}
-    , {validate,   2}
-    , {convert,    2}
-    ];
-behaviour_info(_) -> undefined.
+%%%_* Callbacks ========================================================
+-callback name()                          -> eon_type:name().
+-callback parameters()                    -> eon_type:params().
+-callback normalize(_, eon_type:params()) -> _.
+-callback validate(_, eon_type:params())  -> boolean().
+-callback convert(_, eon_type:params())   -> _.
 
 %%%_* Emacs ============================================================
 %%% Local Variables:

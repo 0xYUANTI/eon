@@ -13,6 +13,12 @@
         , raise/1
         ]).
 
+-export_type([ name/0
+             , decl/1
+             , type/0
+             , params/0
+             ]).
+
 %%%_* Includes =========================================================
 -include("eon.hrl").
 -include_lib("stdlib2/include/prelude.hrl").
@@ -22,18 +28,20 @@
 
 %%%_* Code =============================================================
 %%%_ * Types -----------------------------------------------------------
+-type name()     :: atom().
 -type decl(A)    :: lit(A, spec()).    %declaration
 -type spec()     :: type()             %single alternative
                   | sum().             %multiple alternatives
 -type type()     :: cb()               %eon_type_*
                   | {cb(), lit(_, _)}. %type args
 -type sum()      :: [spec()].          %left-to-right
+-type params()   :: obj(_, _).         %parameters
 
 -record(spec,
         { term   :: _                  %input
         , type   :: cb()               %declared type
-        , p_have :: obj(_, _)          %instantiated params
-        , p_need :: obj(_, _)          %uninstantiated params
+        , p_have :: params()           %instantiated params
+        , p_need :: params()           %uninstantiated params
         }).
 
 %%%_ * API -------------------------------------------------------------
@@ -61,10 +69,11 @@ get_error(term, {_, _, _, T, _                 }) -> T;
 get_error(rsn,  {_, _, _, _, {lifted_exn, R, _}}) -> R;
 get_error(rsn,  {_, _, _, _, R                 }) -> R.
 
+-spec raise(_) -> no_return().
 raise(Err) -> throw({error, Err}).
 
 %%%_ * Parsing ---------------------------------------------------------
--spec parse(obj(A, _), decl(A)) -> [obj(A, #spec{})].
+-spec parse(obj(A, _), decl(A)) -> maybe([obj(A, #spec{})], _).
 parse(Obj, Decl) ->
   s2_maybe:do(
     [ ?thunk({Obj, Decl})

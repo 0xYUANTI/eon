@@ -6,17 +6,11 @@
 %%%_* Module declaration ===============================================
 -module(eon_type_list).
 
-%%%_* Exports ==========================================================
--export([ behaviour_info/1
-        ]).
-
-%%%_* Code =============================================================
-behaviour_info(callbacks) ->
-    [ {name,         0}
-    , {parameters,   0}
-    , {element_type, 2}
-    ];
-behaviour_info(_) -> undefined.
+%%%_* Callbacks ========================================================
+-callback name()                             -> eon_type:name().
+-callback parameters()                       -> eon_type:params().
+-callback element_type(_, eon_type:params()) ->
+  {eon_type:type(), eon_type:params()}.
 
 %%%_* Emacs ============================================================
 %%% Local Variables:

@@ -54,7 +54,6 @@
 
 %%%_* Includes =========================================================
 -include("eon.hrl").
--include_lib("eunit/include/eunit.hrl").
 -include_lib("stdlib2/include/prelude.hrl").
 
 %%%_* Macros ===========================================================
@@ -65,7 +64,8 @@
 -type object()      :: orddict:orddict().
 -type object(A, B)  :: orddict:orddict()
                      | [{A, B}]
-                     | literal(A, B).
+                     | literal(A, B)
+                     | dict:dict().
 
 -type literal(A, B) :: [A | B].
 -type deep_key()    :: binary() | list().
@@ -82,7 +82,7 @@ new() -> orddict:new().
 %% @doc new(Obj) is the canonical representation of Obj.
 new([X|_] = Xs) when is_tuple(X) -> Xs;
 new(Xs) when is_list(Xs)         -> orddict:from_list(partition(Xs));
-new(Xs) when is_tuple(Xs)        -> dict:to_list(Xs).
+new(Xs)                          -> orddict:from_list(dict:to_list(Xs)).
 
 partition(KVs) ->
   ?hence(0 =:= length(KVs) rem 2),
@@ -100,30 +100,10 @@ new(X, Pred) ->
       V
     end, new(X)).
 
-new_test() ->
-  _           = new(),
-  _           = new(dict:new()),
-  _           = new(orddict:store( foo
-                                 , 42
-                                 , orddict:store(bar, 666, orddict:new())) ),
-  _           = new([{foo, 42}, {bar, 666}]),
-  _           = new([{foo, bar},baz]),
-  _           = new([foo,42, bar,666]),
-  {error, _}  = (catch new([foo,bar, baz])),
-  {'EXIT', _} = (catch new(42)),
-
-  _           = new([foo,bar], fun(K, V) -> K =:= foo andalso V =:= bar end),
-  {error, _}  = (catch new([foo,bar], fun(V) -> V =:= baz end)).
-
 %%%_ * Basics ----------------------------------------------------------
 -spec del(object(A, B), A) -> object(A, B).
 %% @doc del(Obj, Key) is Obj with the entry for Key removed.
 del(Obj, Key) -> lists:keydelete(Key, 1, new(Obj)).
-
-del_test() ->
-  Nil = new(),
-  Nil = del(Nil, foo),
-  Nil = del(set(Nil, foo, bar), foo).
 
 -spec ddel(object(deep_key(), B), deep_key()) -> object(deep_key(), B).
 %% @doc ddel(Obj, Key) is Obj with the entry for the deep Key removed.
@@ -136,34 +116,11 @@ ddel(Obj, [H|T]=K) when is_list(K) ->
         {ok, O} when is_list(O)      -> set(Obj, H, ddel(O, T))
     end.
 
-ddel_test() ->
-  P = [ {<<"one">>,   1}
-      , {<<"two">>,   [ {<<"two_one">>,   21}
-                      , {<<"two_two">>,   [{<<"two_two">>, 22}]}
-                      , {<<"two_three">>, [{ <<"two_three_one">>
-                                           , [{<<"two_three_one">>, 231}]
-                                           }]}
-                      ]}
-      , {"three",     3} ],
-
-  ?assertObjEq(new([{<<"one">>, 1}, {"three", 3}]), ddel(P, <<"two">>)),
-  ?assertObjEq(P, ddel(P, <<"blahblah">>)),
-  ?assertObjEq(set( P, <<"two">>
-                  , new([ {<<"two_two">>,   [{<<"two_two">>,22}]}
-                        , {<<"two_three">>, [{ <<"two_three_one">>
-                                             , [{<<"two_three_one">>,231}]}
-                                            ]}
-                        ])), ddel(P, <<"two.two_one">>)).
-
 
 -spec equal(object(_, _), object(_, _)) -> boolean().
 %% @doc equal(Obj1, Obj2) is true iff Obj1 matches Obj2.
 equal(Obj, Obj)   -> true;
 equal(Obj1, Obj2) -> lists:sort(dsort(new(Obj1)))=:=lists:sort(dsort(new(Obj2))).
-
-equal_test() ->
-  true  = equal(new(), new()),
-  false = equal([foo,bar], [foo,baz]).
 
 
 -spec get(object(A, B), A) -> maybe(B, notfound).
@@ -191,15 +148,6 @@ get_(Obj, Key) ->
   {ok, Res} = get(Obj, Key),
   Res.
 
-get_test() ->
-  {error, notfound} = get(new(), foo),
-  bar               = get(new(), foo, bar),
-  {ok, bar}         = get(set(new(), foo, bar), foo),
-  bar               = get(set(new(), foo, bar), foo, baz),
-  1                 = get_([foo, 1], foo),
-  {error, {lifted_exn, {badmatch, {error, notfound}}, _}}
-                    = ?lift(get_(new(), foo)).
-
 -spec dget(object(deep_key(), B), deep_key()) -> maybe(B, notfound).
 %% @doc dget(Obj, Key) is the value associated with the deep Key in Obj,
 %% or an error if no such value exists. A deep key is a `.`-delimetered key.
@@ -224,35 +172,9 @@ dget_(Obj, Key) ->
   {ok, Res} = dget(Obj, Key),
   Res.
 
-dget_test() ->
-  P = [ {<<"one">>,   1}
-      , {<<"two">>,   [ {<<"two_one">>,   21}
-                      , {<<"two_two">>,   [{<<"two_two">>, 22}]}
-                      , {<<"two_three">>, [{ <<"two_three_one">>
-                                           , [{<<"two_three_one">>, 231}]
-                                           }]}
-                      ]}
-      , {"three",     3} ],
-  {error, notfound} = dget(P, <<"non.existent">>),
-  blarg             = dget(P, <<"non.existent">>, blarg),
-  {ok, 1}           = dget(P, <<"one">>),
-  {ok, 3}           = dget(P, "three"),
-  true              = equal(get(P, <<"two">>), dget(P, <<"two">>)),
-  {ok, 21}          = dget(P, <<"two.two_one">>),
-  {ok, 22}          = dget(P, <<"two.two_two.two_two">>),
-  {ok, 231}         = dget(P, <<"two.two_three.two_three_one.two_three_one">>),
-  {ok, 231}         = dget(P, [<<"two">>, <<"two_three">>, <<"two_three_one">>, <<"two_three_one">>]),
-  {error, {lifted_exn, {badmatch, {error, notfound}}, _}}
-                    = ?lift(dget_(new(), "foo")).
-
-
 -spec is_empty(object(_, _)) -> boolean().
 %% @doc is_empty(Obj) is true iff Obj is empty.
 is_empty(Obj) -> 0 =:= size(new(Obj)).
-
-is_empty_test() ->
-  true  = is_empty(new()),
-  false = is_empty([foo,bar]).
 
 
 -spec is_key(object(A, _), A) -> boolean().
@@ -260,27 +182,16 @@ is_empty_test() ->
 %% Key in Obj.
 is_key(Obj, Key) -> lists:keymember(Key, 1, new(Obj)).
 
-is_key_test() ->
-  false = is_key(new(), foo),
-  true  = is_key(set(new(), foo, bar), foo).
-
 
 -spec keys(object(A, _)) -> [A].
 %% @doc keys(Obj) is a list of all keys in Obj.
 keys(Obj) -> [K || {K, _} <- new(Obj)].
-
-keys_test() ->
-  [] = keys(new()).
 
 
 -spec set(object(A, B), A, B) -> object(A, B).
 %% @doc set(Obj, Key, Val) is an object which is identical to Obj
 %% execept that it maps Key to Val.
 set(Obj, Key, Val) -> lists:keystore(Key, 1, new(Obj), {Key, Val}).
-
-set_test() ->
-  ?assertObjEq(set(new(), foo, bar),
-               set(new(), foo, bar)).
 
 -spec dset(object(A, B), A, B) -> object(A, B).
 %% @doc dset(Obj, Key, Val) is an object which is identical to Obj
@@ -293,6 +204,180 @@ dset(Obj, [H|T]=K, Val) when is_list(K) ->
         {ok, O} when is_list(O) -> set(Obj, H, dset(O, T, Val));
         {ok, _}                 -> set(Obj, H, dset(new(), T, Val))
     end.
+
+-spec size(object(_, _)) -> non_neg_integer().
+%% @doc size(Obj) is the number of mappings in Obj.
+size(Obj) -> orddict:size(new(Obj)).
+
+
+-spec vals(object(A, _)) -> [A].
+%% @doc vals(Obj) is a list of all values in Obj.
+vals(Obj) -> [V || {_, V} <- new(Obj)].
+
+
+-spec zip(object(A, B), object(A, C)) -> object(A, {B, C}).
+%% @doc zip(Obj1, Obj2) is an object which maps keys from Obj1 to values
+%% from both Obj1 and Obj2.
+%% Obj1 and Obj2 must have the same set of keys.
+zip(Obj1, Obj2) ->
+  ?hence(lists:sort(keys(Obj1)) =:= lists:sort(keys(Obj2))),
+  orddict:merge( fun(_K, V1, V2) -> {V1, V2} end
+               , lists:sort(new(Obj1)), lists:sort(new(Obj2)) ).
+
+%%%_ * Higher-order ----------------------------------------------------
+-spec map(func(C), object(A, _)) -> object(A, C).
+%% @doc map(F, Obj) is the result of mapping F over Obj's entries.
+map(F, Obj) ->
+  orddict:map(
+    fun(K, V) ->
+      if is_function(F, 1) -> F(V);
+         is_function(F, 2) -> F(K, V)
+      end
+    end, new(Obj)).
+
+
+-spec filter(func(boolean()), object(_, _)) -> object(_, _).
+%% @doc filter(F, Obj) is the subset of entries in Obj for which Pred
+%% returns true.
+filter(Pred, Obj) ->
+  orddict:filter(
+    fun(K, V) ->
+      if is_function(Pred, 1) -> Pred(V);
+         is_function(Pred, 2) -> Pred(K, V)
+      end
+    end, new(Obj)).
+
+
+-spec fold(fun(), A, object(_, _)) -> A.
+%% @doc fold(F, Acc0, Obj) is Obj reduced to Acc0 via F.
+fold(F, Acc0, Obj) ->
+  lists:foldl(
+    fun({K, V}, Acc) ->
+      if is_function(F, 2) -> F(V, Acc);
+         is_function(F, 3) -> F(K, V, Acc)
+      end
+    end, Acc0, new(Obj)).
+
+%%%_ * Sets ------------------------------------------------------------
+-spec union(object(_, _), object(_, _)) -> object(_, _).
+%% @doc union(Obj1, Obj2) is Obj1 plus any entries from Obj2 whose keys
+%% do not occur in Obj1.
+union(Obj1, Obj2) ->
+  lists:ukeymerge(1, lists:ukeysort(1,new(Obj1)), lists:ukeysort(1,new(Obj2))).
+
+
+-spec difference(object(_, _), object(_, _)) -> object(_, _).
+%% @doc difference(Obj1, Obj2) is Obj1 with all entries whose keys occur
+%% in Obj2 removed.
+difference(Obj1, Obj2) ->
+  orddict:filter(fun(K, _V) -> not is_key(new(Obj2), K) end, new(Obj1)).
+
+-spec intersection(object(_, _), object(_, _)) -> object(_, _).
+%% @doc intersection(Obj1, Obj2) is Obj1 with all entries whose keys do
+%% not occur in Obj2 removed.
+intersection(Obj1, Obj2) ->
+  orddict:filter(fun(K, _V) -> is_key(new(Obj2), K) end, new(Obj1)).
+
+%%%_ * Iterators -------------------------------------------------------
+-type iterator()         :: [{_, _}].
+
+-spec make(object(_, _)) -> iterator().
+%% @doc make(Obj) is an iterator for Obj.
+make(Obj)                -> new(Obj).
+
+-spec next(iterator())   -> {_, iterator()}.
+%% @doc next(It0) is the next entry in iterator It0 and the updated
+%% iterator It.
+next([X|Xs])             -> {X, Xs}.
+
+-spec done(iterator())   -> boolean().
+%% @doc done(It) is true iff iterator it is empty.
+done([])                 -> true;
+done([_|_])              -> false.
+
+
+%%%_* Private functions ================================================
+
+%%%_* Private functions ================================================
+normalize_deep_key(K) when is_binary(K) -> binary:split(K, <<".">>, [global]);
+normalize_deep_key(K) when is_list(K), not is_integer(hd(K)) -> K;
+normalize_deep_key(K) when is_list(K)   -> string:tokens(K, ".").
+
+dsort([])                            -> [];
+dsort([{K, V} | T]) when is_list(V)  -> [{K, lists:sort(dsort(V))} | dsort(T)];
+dsort([H | T]) when is_list(H)       -> [lists:sort(dsort(H)) | dsort(T)];
+dsort([H | T])                       -> [H | dsort(T)].
+
+%%%_* Tests ============================================================
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+new_test() ->
+  _           = new(),
+  _           = new(dict:new()),
+  _           = new(orddict:store( foo
+                                 , 42
+                                 , orddict:store(bar, 666, orddict:new())) ),
+  _           = new([{foo, 42}, {bar, 666}]),
+  _           = new([{foo, bar},baz]),
+  _           = new([foo,42, bar,666]),
+  {error, _}  = (catch new([foo,bar, baz])),
+  {'EXIT', _} = (catch new(42)),
+
+  _           = new([foo,bar], fun(K, V) -> K =:= foo andalso V =:= bar end),
+  {error, _}  = (catch new([foo,bar], fun(V) -> V =:= baz end)).
+
+del_test() ->
+  Nil = new(),
+  Nil = del(Nil, foo),
+  Nil = del(set(Nil, foo, bar), foo).
+
+ddel_test() ->
+  P = [ {<<"one">>,   1}
+      , {<<"two">>,   [ {<<"two_one">>,   21}
+                      , {<<"two_two">>,   [{<<"two_two">>, 22}]}
+                      , {<<"two_three">>, [{ <<"two_three_one">>
+                                           , [{<<"two_three_one">>, 231}]
+                                           }]}
+                      ]}
+      , {"three",     3} ],
+
+  ?assertObjEq(new([{<<"one">>, 1}, {"three", 3}]), ddel(P, <<"two">>)),
+  ?assertObjEq(P, ddel(P, <<"blahblah">>)),
+  ?assertObjEq(set( P, <<"two">>
+                  , new([ {<<"two_two">>,   [{<<"two_two">>,22}]}
+                        , {<<"two_three">>, [{ <<"two_three_one">>
+                                             , [{<<"two_three_one">>,231}]}
+                                            ]}
+                        ])), ddel(P, <<"two.two_one">>)).
+
+equal_test() ->
+  true  = equal(new(), new()),
+  false = equal([foo,bar], [foo,baz]).
+
+get_test() ->
+  {error, notfound} = get(new(), foo),
+  bar               = get(new(), foo, bar),
+  {ok, bar}         = get(set(new(), foo, bar), foo),
+  bar               = get(set(new(), foo, bar), foo, baz),
+  1                 = get_([foo, 1], foo),
+  {error, {lifted_exn, {badmatch, {error, notfound}}, _}}
+                    = ?lift(get_(new(), foo)).
+
+is_empty_test() ->
+  true  = is_empty(new()),
+  false = is_empty([foo,bar]).
+
+is_key_test() ->
+  false = is_key(new(), foo),
+  true  = is_key(set(new(), foo, bar), foo).
+
+keys_test() ->
+  [] = keys(new()).
+
+set_test() ->
+  ?assertObjEq(set(new(), foo, bar),
+               set(new(), foo, bar)).
 
 dset_test() ->
   P = [ {<<"one">>,   1}
@@ -319,49 +404,39 @@ dset_test() ->
                                             ]}
                         ])), dset(P, <<"two.two_one">>, 666)).
 
-
--spec size(object(_, _)) -> non_neg_integer().
-%% @doc size(Obj) is the number of mappings in Obj.
-size(Obj) -> orddict:size(new(Obj)).
+dget_test() ->
+  P = [ {<<"one">>,   1}
+      , {<<"two">>,   [ {<<"two_one">>,   21}
+                      , {<<"two_two">>,   [{<<"two_two">>, 22}]}
+                      , {<<"two_three">>, [{ <<"two_three_one">>
+                                           , [{<<"two_three_one">>, 231}]
+                                           }]}
+                      ]}
+      , {"three",     3} ],
+  {error, notfound} = dget(P, <<"non.existent">>),
+  blarg             = dget(P, <<"non.existent">>, blarg),
+  {ok, 1}           = dget(P, <<"one">>),
+  {ok, 3}           = dget(P, "three"),
+  true              = equal(get(P, <<"two">>), dget(P, <<"two">>)),
+  {ok, 21}          = dget(P, <<"two.two_one">>),
+  {ok, 22}          = dget(P, <<"two.two_two.two_two">>),
+  {ok, 231}         = dget(P, <<"two.two_three.two_three_one.two_three_one">>),
+  {ok, 231}         = dget(P, [<<"two">>, <<"two_three">>, <<"two_three_one">>, <<"two_three_one">>]),
+  {error, {lifted_exn, {badmatch, {error, notfound}}, _}}
+                    = ?lift(dget_(new(), "foo")).
 
 size_test() ->
   0 = size(new()),
   1 = size([foo,bar]).
-
-
--spec vals(object(A, _)) -> [A].
-%% @doc vals(Obj) is a list of all values in Obj.
-vals(Obj) -> [V || {_, V} <- new(Obj)].
 
 vals_test() ->
   Vs   = vals([foo,1, bar,2]),
   true = lists:member(1, Vs),
   true = lists:member(2, Vs).
 
-
--spec zip(object(A, B), object(A, C)) -> object(A, {B, C}).
-%% @doc zip(Obj1, Obj2) is an object which maps keys from Obj1 to values
-%% from both Obj1 and Obj2.
-%% Obj1 and Obj2 must have the same set of keys.
-zip(Obj1, Obj2) ->
-  ?hence(lists:sort(keys(Obj1)) =:= lists:sort(keys(Obj2))),
-  orddict:merge( fun(_K, V1, V2) -> {V1, V2} end
-               , lists:sort(new(Obj1)), lists:sort(new(Obj2)) ).
-
 zip_test() ->
   ?assertObjEq([foo,{bar, baz}],
                zip([foo,bar], [foo,baz])).
-
-%%%_ * Higher-order ----------------------------------------------------
--spec map(func(C), object(A, _)) -> object(A, C).
-%% @doc map(F, Obj) is the result of mapping F over Obj's entries.
-map(F, Obj) ->
-  orddict:map(
-    fun(K, V) ->
-      if is_function(F, 1) -> F(V);
-         is_function(F, 2) -> F(K, V)
-      end
-    end, new(Obj)).
 
 map_test() ->
   ?assertObjEq([foo,1],
@@ -369,88 +444,27 @@ map_test() ->
   ?assertObjEq([foo,1],
                map(fun(_K, V) -> V+1 end, [foo,0])).
 
-
--spec filter(func(boolean()), object(_, _)) -> object(_, _).
-%% @doc filter(F, Obj) is the subset of entries in Obj for which Pred
-%% returns true.
-filter(Pred, Obj) ->
-  orddict:filter(
-    fun(K, V) ->
-      if is_function(Pred, 1) -> Pred(V);
-         is_function(Pred, 2) -> Pred(K, V)
-      end
-    end, new(Obj)).
-
 filter_test() ->
   ?assertObjEq(new(),
                filter(fun(V) -> V =/= 42 end, [foo, 42])),
   ?assertObjEq(new(),
                filter(fun(K, _V) -> K =/= foo end, [foo, 42])).
 
-
--spec fold(fun(), A, object(_, _)) -> A.
-%% @doc fold(F, Acc0, Obj) is Obj reduced to Acc0 via F.
-fold(F, Acc0, Obj) ->
-  lists:foldl(
-    fun({K, V}, Acc) ->
-      if is_function(F, 2) -> F(V, Acc);
-         is_function(F, 3) -> F(K, V, Acc)
-      end
-    end, Acc0, new(Obj)).
-
 fold_test() ->
   6  = fold(fun(V, Sum)    -> V+Sum end,   0, [1,2, 3,4]),
   10 = fold(fun(K, V, Sum) -> K+V+Sum end, 0, [1,2, 3,4]).
-
-%%%_ * Sets ------------------------------------------------------------
--spec union(object(_, _), object(_, _)) -> object(_, _).
-%% @doc union(Obj1, Obj2) is Obj1 plus any entries from Obj2 whose keys
-%% do not occur in Obj1.
-union(Obj1, Obj2) ->
-  lists:ukeymerge(1, lists:ukeysort(1,new(Obj1)), lists:ukeysort(1,new(Obj2))).
 
 union_test() ->
   ?assertObjEq([foo,1, bar,2, baz,3],
                union([foo,1, bar,2], [bar,3, baz,3])).
 
-
--spec difference(object(_, _), object(_, _)) -> object(_, _).
-%% @doc difference(Obj1, Obj2) is Obj1 with all entries whose keys occur
-%% in Obj2 removed.
-difference(Obj1, Obj2) ->
-  orddict:filter(fun(K, _V) -> not is_key(new(Obj2), K) end, new(Obj1)).
-
-difference_test() ->
-  ?assertObjEq(new(),
-               difference([foo,1], [foo, 2])).
-
-
--spec intersection(object(_, _), object(_, _)) -> object(_, _).
-%% @doc intersection(Obj1, Obj2) is Obj1 with all entries whose keys do
-%% not occur in Obj2 removed.
-intersection(Obj1, Obj2) ->
-  orddict:filter(fun(K, _V) -> is_key(new(Obj2), K) end, new(Obj1)).
-
 intersection_test() ->
   ?assertObjEq([bar,2],
                intersection([foo,1, bar,2], [bar,2, baz,2])).
 
-%%%_ * Iterators -------------------------------------------------------
--type iterator()         :: [{_, _}].
-
--spec make(object(_, _)) -> iterator().
-%% @doc make(Obj) is an iterator for Obj.
-make(Obj)                -> new(Obj).
-
--spec next(iterator())   -> {_, iterator()}.
-%% @doc next(It0) is the next entry in iterator It0 and the updated
-%% iterator It.
-next([X|Xs])             -> {X, Xs}.
-
--spec done(iterator())   -> boolean().
-%% @doc done(It) is true iff iterator it is empty.
-done([])                 -> true;
-done([_|_])              -> false.
+difference_test() ->
+  ?assertObjEq(new(),
+               difference([foo,1], [foo, 2])).
 
 iterator_test() ->
  It0         = make([foo,1, bar,2]),
@@ -461,15 +475,8 @@ iterator_test() ->
  true        = Elt2 =:= {foo,1} orelse Elt2 =:= {bar,2},
  true        = Elt1 =/= Elt2,
  true        = done(It).
-%%%_* Private functions ================================================
-normalize_deep_key(K) when is_binary(K) -> binary:split(K, <<".">>, [global]);
-normalize_deep_key(K) when is_list(K), not is_integer(hd(K)) -> K;
-normalize_deep_key(K) when is_list(K)   -> string:tokens(K, ".").
 
-dsort([])                            -> [];
-dsort([{K, V} | T]) when is_list(V)  -> [{K, lists:sort(dsort(V))} | dsort(T)];
-dsort([H | T]) when is_list(H)       -> [lists:sort(dsort(H)) | dsort(T)];
-dsort([H | T])                       -> [H | dsort(T)].
+-endif.
 
 %%%_* Emacs ============================================================
 %%% Local Variables:

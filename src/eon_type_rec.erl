@@ -6,17 +6,10 @@
 %%%_* Module declaration ===============================================
 -module(eon_type_rec).
 
-%%%_* Exports ==========================================================
--export([ behaviour_info/1
-         ]).
-
-%%%_* Code =============================================================
-behaviour_info(callbacks) ->
-    [ {name,       0}
-    , {parameters, 0}
-    , {decl,       2}
-    ];
-behaviour_info(_) -> undefined.
+%%%_* Callbacks ========================================================
+-callback name()                                    -> eon_type:name().
+-callback parameters()                              -> eon_type:params().
+-callback decl(eon:object(A, _), eon_type:params()) -> eon_type:decl(A).
 
 %%%_* Emacs ============================================================
 %%% Local Variables:
