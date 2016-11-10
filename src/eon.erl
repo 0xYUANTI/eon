@@ -80,6 +80,7 @@ new() -> orddict:new().
 
 -spec new(object(A, B)) -> object(A, B).
 %% @doc new(Obj) is the canonical representation of Obj.
+new([{}])                        -> [];
 new([X|_] = Xs) when is_tuple(X) -> Xs;
 new(Xs) when is_list(Xs)         -> orddict:from_list(partition(Xs));
 new(Xs)                          -> orddict:from_list(dict:to_list(Xs)).
