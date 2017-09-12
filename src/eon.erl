@@ -153,9 +153,10 @@ get_(Obj, Key) ->
 %% @doc dget(Obj, Key) is the value associated with the deep Key in Obj,
 %% or an error if no such value exists. A deep key is a `.`-delimetered key.
 dget(Obj, Key) ->
-    lists:foldl(fun(_, {error, notfound}=E) -> E;
-                   (K, {ok, Acc})           -> eon:get(Acc, K)
-                end, {ok, Obj}, normalize_deep_key(Key)).
+    lists:foldl(fun(_, {error, notfound}=E)         -> E;
+                   (K, {ok, Acc}) when is_list(Acc) -> eon:get(Acc, K);
+                   (_, {ok, _})                     -> {error, notfound}
+                end, {ok, new(Obj)}, normalize_deep_key(Key)).
 
 -spec dget(object(deep_key(), B), deep_key(), B) -> B.
 %% @doc dget(Obj, Key) is the value associated with the deep Key in Obj,
@@ -413,7 +414,8 @@ dget_test() ->
                                            , [{<<"two_three_one">>, 231}]
                                            }]}
                       ]}
-      , {"three",     3} ],
+      , {"three",     3}
+      , {<<"four">>,      null}],
   {error, notfound} = dget(P, <<"non.existent">>),
   blarg             = dget(P, <<"non.existent">>, blarg),
   {ok, 1}           = dget(P, <<"one">>),
@@ -423,6 +425,8 @@ dget_test() ->
   {ok, 22}          = dget(P, <<"two.two_two.two_two">>),
   {ok, 231}         = dget(P, <<"two.two_three.two_three_one.two_three_one">>),
   {ok, 231}         = dget(P, [<<"two">>, <<"two_three">>, <<"two_three_one">>, <<"two_three_one">>]),
+  {ok, null}        = dget(P, <<"four">>),
+  {error, notfound} = dget(P, <<"four.five">>),
   {error, {lifted_exn, {badmatch, {error, notfound}}, _}}
                     = ?lift(dget_(new(), "foo")).
 
