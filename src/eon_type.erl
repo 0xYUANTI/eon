@@ -21,6 +21,7 @@
 
 %%%_* Includes =========================================================
 -include("eon.hrl").
+-include_lib("stdlib/include/assert.hrl").
 -include_lib("stdlib2/include/prelude.hrl").
 
 %%%_* Macros ===========================================================
@@ -145,7 +146,7 @@ do_merge(Obj, Decl) ->
                                 {_, _} -> P; %default value
                                 _      -> {P, ?dummy}
                               end || P <- Type:parameters()]),
-            ?hence(eon:is_empty(eon:difference(Args, Params))),
+            ?assertEqual(eon:new(), eon:difference(Args, Params)),
             #spec{ term   = Term
                  , type   = Type
                  , p_have = Args
