@@ -144,9 +144,9 @@ It does this by computing the fixpoint of the input object under the
 parameter-constraints imposed by the decl object. Progress occurs
 when either
 
-a) a new field can be validated because we have all parameters for its
-   type, or
-b) we find a new implicit parameter (which must have been validated
+- a new field can be validated because we have all parameters for its
+   type, **or**
+- we find a new implicit parameter (which must have been validated
    already).
 
 This probably sounds more complicated than it is. Have a look at
