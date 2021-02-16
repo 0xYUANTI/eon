@@ -85,7 +85,7 @@ false otherwise). This is the central validation callback.
 returns the term, possibly after transforming it to an internal
 representation. This is the central conversion callback.
 
-#### 2). `eon_type_prim`
+#### 2). `eon_type_rec`
 
 Requires implementations of 3 callback functions.
 
