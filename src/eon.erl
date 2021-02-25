@@ -32,6 +32,7 @@
 -export([vals/1]).
 -export([zip/2]).
 -export([with/2]).
+-export([without/2]).
 
 %% Higher-order
 -export([all/2]).
@@ -237,9 +238,17 @@ zip(Obj1, Obj2) ->
 
 
 -spec with(object(A, _), [A]) -> object(A, _).
-%% @doc vals(Obj) is a list of all values in Obj.
+%% @doc Returns an object with the keys specified in `Keys`. Any key in `Keys`
+%% that does not exist in `Obj` is ignored.
 with(Obj, Keys) ->
   filter(fun(Key) -> lists:member(Key, Keys) end, Obj).
+
+
+-spec without(object(A, _), [A]) -> object(A, _).
+%% @doc Returns an object without the keys specified in `Keys`. Any key in
+%% `Keys` that does not exist in `Obj` is ignored.
+without(Obj, Keys) ->
+  fold(fun(Key, _V, Acc) -> eon:del(Acc, Key) end, Obj, Keys).
 
 %%%_ * Higher-order ----------------------------------------------------
 -spec all(func(boolean()), object(_, _)) -> boolean().
@@ -483,6 +492,10 @@ zip_test() ->
 with_test() ->
   ?assertObjEq([foo,1, bar,2],
                with([foo,1, bar,2, baz,3], [foo, bar])).
+
+without_test() ->
+  ?assertObjEq([baz,3],
+               without([foo,1, bar,2, baz,3], [foo, bar])).
 
 map_test() ->
   ?assertObjEq([foo,1],
