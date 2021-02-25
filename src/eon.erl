@@ -31,8 +31,11 @@
 -export([size/1]).
 -export([vals/1]).
 -export([zip/2]).
+-export([with/2]).
 
 %% Higher-order
+-export([all/2]).
+-export([any/2]).
 -export([filter/2]).
 -export([fold/3]).
 -export([map/2]).
@@ -232,7 +235,35 @@ zip(Obj1, Obj2) ->
   orddict:merge( fun(_K, V1, V2) -> {V1, V2} end
                , lists:sort(new(Obj1)), lists:sort(new(Obj2)) ).
 
+
+-spec with(object(A, _), [A]) -> object(A, _).
+%% @doc vals(Obj) is a list of all values in Obj.
+with(Obj, Keys) ->
+  filter(fun(Key) -> lists:member(Key, Keys) end, Obj).
+
 %%%_ * Higher-order ----------------------------------------------------
+-spec all(func(boolean()), object(_, _)) -> boolean().
+%% @doc all(F, Obj) returns `true` if `F` evaluates to `true` for all
+%% entries in Obj.
+all(F, Obj) ->
+  if is_function(F, 1) -> fold( fun(V, Acc)    -> Acc andalso F(V) end
+                              , true, Obj);
+     is_function(F, 2) -> fold( fun(K, V, Acc) -> Acc andalso F(K, V) end
+                              , true, Obj)
+  end.
+
+
+-spec any(func(boolean()), object(_, _)) -> boolean().
+%% @doc any(F, Obj) returns `true` if `F` evaluates to `true` for any
+%% entry in Obj.
+any(F, Obj) ->
+  if is_function(F, 1) -> fold( fun(V, Acc)    -> Acc orelse F(V) end
+                              , false, Obj);
+     is_function(F, 2) -> fold( fun(K, V, Acc) -> Acc orelse F(K, V) end
+                              , false, Obj)
+  end.
+
+
 -spec map(func(C), object(A, _)) -> object(A, C).
 %% @doc map(F, Obj) is the result of mapping F over Obj's entries.
 map(F, Obj) ->
@@ -449,6 +480,10 @@ zip_test() ->
   ?assertObjEq([foo,{bar, baz}],
                zip([foo,bar], [foo,baz])).
 
+with_test() ->
+  ?assertObjEq([foo,1, bar,2],
+               with([foo,1, bar,2, baz,3], [foo, bar])).
+
 map_test() ->
   ?assertObjEq([foo,1],
                map(fun(V) -> V+1 end, [foo,0])),
@@ -460,6 +495,18 @@ filter_test() ->
                filter(fun(V) -> V =/= 42 end, [foo, 42])),
   ?assertObjEq(new(),
                filter(fun(K, _V) -> K =/= foo end, [foo, 42])).
+
+all_test() ->
+  ?assert(all(fun(V)        -> V < 3 end,   [a,1, b,2])),
+  ?assertNot(all(fun(V)     -> V < 3 end,   [a,1, b,4])),
+  ?assert(all(fun(K, _V)    -> K < <<"c">>, [<<"a">>,1, <<"b">>,2])),
+  ?assertNot(all(fun(K, _V) -> K < <<"c">>, [<<"a">>,1, <<"d">>,2])).
+
+any_test() ->
+  ?assert(any(fun(V)        -> V < 3 end,   [a,1, b,4])),
+  ?assertNot(any(fun(V)     -> V < 3 end,   [a,3, b,4])),
+  ?assert(any(fun(K, _V)    -> K < <<"c">>, [<<"a">>,1, <<"d">>,2])),
+  ?assertNot(any(fun(K, _V) -> K < <<"c">>, [<<"c">>,1, <<"d">>,2])).
 
 fold_test() ->
   6  = fold(fun(V, Sum)    -> V+Sum end,   0, [1,2, 3,4]),
