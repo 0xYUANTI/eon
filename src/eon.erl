@@ -30,9 +30,13 @@
 -export([dset/3]).
 -export([size/1]).
 -export([vals/1]).
+-export([with/2]).
+-export([without/2]).
 -export([zip/2]).
 
 %% Higher-order
+-export([all/2]).
+-export([any/2]).
 -export([filter/2]).
 -export([fold/3]).
 -export([map/2]).
@@ -223,6 +227,20 @@ size(Obj) -> orddict:size(new(Obj)).
 vals(Obj) -> [V || {_, V} <- new(Obj)].
 
 
+-spec with(object(A, _), [A]) -> object(A, _).
+%% @doc Returns an object with the keys specified in `Keys`. Any key in `Keys`
+%% that does not exist in `Obj` is ignored.
+with(Obj, Keys) ->
+  filter(fun(Key, _V) -> lists:member(Key, Keys) end, Obj).
+
+
+-spec without(object(A, _), [A]) -> object(A, _).
+%% @doc Returns an object without the keys specified in `Keys`. Any key in
+%% `Keys` that does not exist in `Obj` is ignored.
+without(Obj, Keys) ->
+  filter(fun(Key, _V) -> not lists:member(Key, Keys) end, Obj).
+
+
 -spec zip(object(A, B), object(A, C)) -> object(A, {B, C}).
 %% @doc zip(Obj1, Obj2) is an object which maps keys from Obj1 to values
 %% from both Obj1 and Obj2.
@@ -233,6 +251,39 @@ zip(Obj1, Obj2) ->
                , lists:sort(new(Obj1)), lists:sort(new(Obj2)) ).
 
 %%%_ * Higher-order ----------------------------------------------------
+-spec all(func(boolean()), object(_, _)) -> boolean().
+%% @doc all(F, Obj) returns `true` if `F` evaluates to `true` for all
+%% entries in Obj.
+all(F, Obj) when is_function(F, 1) ->
+  foldl_while(fun(V, _Acc) -> format_all(F(V)) end, true, Obj);
+all(F, Obj) when is_function(F, 2) ->
+  foldl_while(fun(K, V, _Acc) -> format_all(F(K, V)) end, true, Obj).
+
+
+-spec any(func(boolean()), object(_, _)) -> boolean().
+%% @doc any(F, Obj) returns `true` if `F` evaluates to `true` for any
+%% entry in Obj.
+any(F, Obj) when is_function(F, 1) ->
+  foldl_while(fun(V, _Acc) -> format_any(F(V)) end, false, Obj);
+any(F, Obj) when is_function(F, 2) -> 
+  foldl_while(fun(K, V, _Acc) -> format_any(F(K, V)) end, false, Obj).
+
+
+foldl_while(F, Acc, [{_K, V} | Tail]) when is_function(F, 2) ->
+  continue_or_acc(F, F(V, Acc), Tail);
+foldl_while(F, Acc, [{K, V} | Tail]) when is_function(F, 3) ->
+  continue_or_acc(F, F(K, V, Acc), Tail);
+foldl_while(_F, Acc, []) -> Acc.
+
+continue_or_acc(F, {ok, Acc}, Obj) -> foldl_while(F, Acc, Obj);
+continue_or_acc(_, {stop, Acc}, _) -> Acc.
+
+format_all(true)  -> {ok, true};
+format_all(false) -> {stop, false}.
+
+format_any(false) -> {ok, false};
+format_any(true)  -> {stop, true}.
+
 -spec map(func(C), object(A, _)) -> object(A, C).
 %% @doc map(F, Obj) is the result of mapping F over Obj's entries.
 map(F, Obj) ->
@@ -445,9 +496,35 @@ vals_test() ->
   true = lists:member(1, Vs),
   true = lists:member(2, Vs).
 
+with_test() ->
+  ?assertObjEq(eon:new([foo,1, bar,2]),
+               with(eon:new([foo,1, bar,2, baz,3]), [foo, bar])),
+  ?assertObjEq(eon:new([foo,1, bar,2]),
+               with(eon:new([foo,1, bar,2, baz,3]), [foo, bar, hello])).
+
+without_test() ->
+  ?assertObjEq(eon:new([baz,3]),
+               without(eon:new([foo,1, bar,2, baz,3]), [foo, bar])),
+  ?assertObjEq(eon:new([baz,3]),
+               without(eon:new([foo,1, bar,2, baz,3]), [foo, bar, hello])).
+
 zip_test() ->
   ?assertObjEq([foo,{bar, baz}],
                zip([foo,bar], [foo,baz])).
+
+all_test() ->
+  ?assert(all(fun(V)        -> V < 3       end, eon:new([]))),
+  ?assert(all(fun(V)        -> V < 3       end, eon:new([a,1, b,2]))),
+  ?assertNot(all(fun(V)     -> V < 3       end, eon:new([a,1, b,4]))),
+  ?assert(all(fun(K, _V)    -> K < <<"c">> end, eon:new([<<"a">>,1, <<"b">>,2]))),
+  ?assertNot(all(fun(K, _V) -> K < <<"c">> end, eon:new([<<"a">>,1, <<"d">>,2]))).
+
+any_test() ->
+  ?assertNot(any(fun(V)     -> V < 3       end, eon:new([]))),
+  ?assert(any(fun(V)        -> V < 3       end, eon:new([a,1, b,4]))),
+  ?assertNot(any(fun(V)     -> V < 3       end, eon:new([a,3, b,4]))),
+  ?assert(any(fun(K, _V)    -> K < <<"c">> end, eon:new([<<"a">>,1, <<"d">>,2]))),
+  ?assertNot(any(fun(K, _V) -> K < <<"c">> end, eon:new([<<"c">>,1, <<"d">>,2]))).
 
 map_test() ->
   ?assertObjEq([foo,1],
