@@ -1,6 +1,6 @@
-{application, eon, [ {description,  "EON"}
+{application, eon, [ {description,  "Erlang Object Notation"}
                    , {vsn,          git}
                    , {registered,   []}
-                   , {applications, [kernel, stdlib]}
+                   , {applications, [kernel, stdlib, stdlib2]}
                    , {modules,      []}
                    ]}.

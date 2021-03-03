@@ -1,0 +1,4 @@
+[{<<"stdlib2">>,
+  {git,"https://github.com/kivra/stdlib2",
+       {ref,"cc881ee2e3ca8adcc2a3c4414c91d92b172a0bd9"}},
+  0}].

@@ -329,7 +329,7 @@ new_test() ->
   _           = new([{foo, 42}, {bar, 666}]),
   _           = new([{foo, bar},baz]),
   _           = new([foo,42, bar,666]),
-  {error, _}  = (catch new([foo,bar, baz])),
+  {'EXIT', _} = (catch new([foo,bar, baz])),
   {'EXIT', _} = (catch new(42)),
 
   _           = new([foo,bar], fun(K, V) -> K =:= foo andalso V =:= bar end),

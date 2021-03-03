@@ -57,30 +57,26 @@ get_full_key_test() ->
         , [ { <<"contact_info">>, type_contact_info, contact_info, the_term
             , { untypable
               , [{<<"email">>, type_email, email, the_term, validate}]}}]},
-  [<<"contact_info">>, <<"email">>] = get_error_key_list(Rsn),
-  <<"contact_info.email">>         = get_full_key(Rsn).
+  ?assertEqual([<<"contact_info">>, <<"email">>], get_error_key_list(Rsn)),
+  ?assertEqual(<<"contact_info.email">>, get_full_key(Rsn)).
 
 get_root_cause__primitive_type__test() ->
-  {error, Rsn} = eon_type:check_term(42, type_string),
-  {42, type_string} = get_root_cause(Rsn).
+  {error, Rsn} = eon_type:check_term(42, test_string),
+  ?assertEqual({42, test_string}, get_root_cause(Rsn)).
 
 get_root_cause__recursive_type_wrong_nested_type__test() ->
-  Term =
-    [ {<<"orgnr">>, <<"SE1234">>}
-    , {<<"name">>, <<"Test">>}
-    ],
-  {error, Rsn} = eon_type:check_term(Term, type_company_id_item),
-  {<<"SE1234">>, type_orgnr} = get_root_cause(Rsn).
+  Address = [ {<<"street">>, <<"Main Street">>}
+            , {<<"residents">>, [42, <<"Amelie">>, <<"Karin">>]}],
+  {error, Rsn} = eon_type:check_term(Address, test_address),
+  ?assertEqual({42, test_string}, get_root_cause(Rsn)).
 
 get_root_cause__recursive_type_missing_field__test() ->
-  Term =
-    [ {<<"name">>, <<"Test">>}
-    ],
-  {error, Rsn} = eon_type:check_term(Term, type_company_id_item),
-  {Term, type_company_id_item} = get_root_cause(Rsn).
+  Address = [{<<"residents">>, [<<"Mike">>, <<"Amelie">>, <<"Karin">>]}],
+  {error, Rsn} = eon_type:check_term(Address, test_address),
+  ?assertEqual({Address, test_address}, get_root_cause(Rsn)).
 
 get_root_cause__list_type__test() ->
-  {error, Rsn} = eon_type:check_term([<<"foo">>, 42], type_strings),
-  {42, type_string} = get_root_cause(Rsn).
+  {error, Rsn} = eon_type:check_term([<<"foo">>, 42], test_strings),
+  ?assertEqual({42, test_string}, get_root_cause(Rsn)).
 
 -endif.

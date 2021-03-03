@@ -1,15 +1,16 @@
-PROJECT   = eon
+all: compile
 
-# Options ##############################################################
-ERLC_OPTS = +debug_info +nowarn_shadow_vars +warnings_as_errors
-AUTOPATCH += stdlib2
+compile:
+	rebar3 compile
 
-# Dependecies ##########################################################
-DEPS = stdlib2
+clean:
+	rebar3 clean
 
-dep_stdlib2 = git://github.com/kivra/stdlib2.git master
+eunit:
+	rebar3 eunit
 
-# Standard targets #####################################################
-include erlang.mk
+dialyze:
+	rebar3 dialyzer
 
-# eof
+xref:
+	rebar3 xref

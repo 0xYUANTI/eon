@@ -7,6 +7,7 @@
                         Erlang Object Notation
 
 ```
+[![Tests](https://github.com/kivra/eon/actions/workflows/tests.yml/badge.svg)](https://github.com/kivra/eon/actions/workflows/tests.yml)
 
 # Manual
 
