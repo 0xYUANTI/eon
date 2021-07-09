@@ -34,6 +34,10 @@
 -export([without/2]).
 -export([zip/2]).
 
+%% Conversion
+-export([from_map/1]).
+-export([to_map/1]).
+
 %% Higher-order
 -export([all/2]).
 -export([any/2]).
@@ -75,6 +79,7 @@
 
 -type literal(A, B) :: [A | B].
 -type deep_key()    :: binary() | list().
+-type map(A, B)     :: #{A := B}.
 
 -type func(A)       :: fun((_, _) -> A)
                      | fun((_)    -> A).
@@ -84,10 +89,11 @@
 %% @doc new() is a fresh object.
 new() -> orddict:new().
 
--spec new(object(A, B)) -> object(A, B).
+-spec new(object(A, B) | map(A, B)) -> object(A, B).
 %% @doc new(Obj) is the canonical representation of Obj.
 new([{}])                        -> [];
 new([X|_] = Xs) when is_tuple(X) -> Xs;
+new(Map) when is_map(Map)        -> from_map(Map);
 new(Xs) when is_list(Xs)         -> orddict:from_list(partition(Xs));
 new(Xs)                          -> orddict:from_list(dict:to_list(Xs)).
 
@@ -250,6 +256,16 @@ zip(Obj1, Obj2) ->
   orddict:merge( fun(_K, V1, V2) -> {V1, V2} end
                , lists:sort(new(Obj1)), lists:sort(new(Obj2)) ).
 
+%%%_ * Conversion ------------------------------------------------------
+-spec to_map(object(A, B)) -> map(A, B).
+%% @doc to_map(Obj) returns a map representing the key-value associations of
+%% Obj.
+to_map(Obj) -> maps:map(fun maybe_obj_to_map/2, maps:from_list(Obj)).
+
+-spec from_map(map(A, B)) -> object(A, B).
+%% @doc from_map(Obj) builds an eon object from a map.
+from_map(Map) -> orddict:map(fun maybe_map_to_obj/2, new(maps:to_list(Map))).
+
 %%%_ * Higher-order ----------------------------------------------------
 -spec all(func(boolean()), object(_, _)) -> boolean().
 %% @doc all(F, Obj) returns `true` if `F` evaluates to `true` for all
@@ -367,6 +383,17 @@ dsort([{K, V} | T]) when is_list(V)  -> [{K, lists:sort(dsort(V))} | dsort(T)];
 dsort([H | T]) when is_list(H)       -> [lists:sort(dsort(H)) | dsort(T)];
 dsort([H | T])                       -> [H | dsort(T)].
 
+maybe_obj_to_map(_Key, Val) -> maybe_apply(fun to_map/1, Val).
+
+maybe_map_to_obj(_Key, Val) -> maybe_apply(fun from_map/1, Val).
+
+maybe_apply(F, Any) ->
+  try
+    F(Any)
+  catch
+    _:_ -> Any
+  end.
+
 %%%_* Tests ============================================================
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -380,6 +407,8 @@ new_test() ->
   _           = new([{foo, 42}, {bar, 666}]),
   _           = new([{foo, bar},baz]),
   _           = new([foo,42, bar,666]),
+  _           = new(#{}),
+  _           = new(#{foo => 42, bar => 666}),
   {'EXIT', _} = (catch new([foo,bar, baz])),
   {'EXIT', _} = (catch new(42)),
 
@@ -495,6 +524,37 @@ vals_test() ->
   Vs   = vals([foo,1, bar,2]),
   true = lists:member(1, Vs),
   true = lists:member(2, Vs).
+
+from_map_test() ->
+  Obj     = [{foo, 1}, {bar, 2}],
+  Map     = #{foo => 1, bar => 2},
+  DeepMap = #{foo => 1,
+              bar => #{baz => 2,
+                       hello => #{hi => 3,
+                                  hej => #{}}}},
+  DeepObj = [{foo, 1},
+             {bar, [{baz, 2},
+                    {hello, [{hi, 3},
+                             {hej, eon:new()}]}]}],
+  ?assertObjEq(eon:new(), eon:from_map(#{})),
+  ?assertObjEq(eon:new(Obj), eon:from_map(Map)),
+  ?assertObjEq(eon:new(DeepObj), eon:from_map(DeepMap)),
+  ?assertObjEq(DeepObj, eon:from_map(eon:to_map(DeepObj))).
+
+to_map_test() ->
+  Obj     = [{foo, 1}, {bar, 2}],
+  Map     = #{foo => 1, bar => 2},
+  DeepMap = #{foo => 1,
+              bar => #{baz => 2,
+                       hello => #{hi => 3,
+                                  hej => #{}}}},
+  DeepObj = [{foo, 1},
+             {bar, [{baz, 2},
+                    {hello, [{hi, 3},
+                             {hej, eon:new()}]}]}],
+  ?assertEqual(Map, eon:to_map(Obj)),
+  ?assertEqual(DeepMap, eon:to_map(DeepObj)),
+  ?assertEqual(DeepMap, eon:to_map(eon:from_map(DeepMap))).
 
 with_test() ->
   ?assertObjEq(eon:new([foo,1, bar,2]),
