@@ -34,6 +34,12 @@
 -export([without/2]).
 -export([zip/2]).
 
+%% Conversion
+-export([from_map/1]).
+-export([from_dmap/1]).
+-export([to_map/1]).
+-export([to_dmap/1]).
+
 %% Higher-order
 -export([all/2]).
 -export([any/2]).
@@ -67,14 +73,16 @@
 
 %%%_* Code =============================================================
 %%%_ * Types -----------------------------------------------------------
+-type kv_list(A, B) :: [{A, B}].
 -type object()      :: orddict:orddict().
 -type object(A, B)  :: orddict:orddict()
-                     | [{A, B}]
+                     | kv_list(A, B)
                      | literal(A, B)
                      | dict:dict().
 
 -type literal(A, B) :: [A | B].
 -type deep_key()    :: binary() | list().
+-type map(A, B)     :: #{A := B}.
 
 -type func(A)       :: fun((_, _) -> A)
                      | fun((_)    -> A).
@@ -84,10 +92,11 @@
 %% @doc new() is a fresh object.
 new() -> orddict:new().
 
--spec new(object(A, B)) -> object(A, B).
+-spec new(object(A, B) | map(A, B)) -> object(A, B).
 %% @doc new(Obj) is the canonical representation of Obj.
 new([{}])                        -> [];
 new([X|_] = Xs) when is_tuple(X) -> Xs;
+new(Map) when is_map(Map)        -> from_map(Map);
 new(Xs) when is_list(Xs)         -> orddict:from_list(partition(Xs));
 new(Xs)                          -> orddict:from_list(dict:to_list(Xs)).
 
@@ -250,6 +259,28 @@ zip(Obj1, Obj2) ->
   orddict:merge( fun(_K, V1, V2) -> {V1, V2} end
                , lists:sort(new(Obj1)), lists:sort(new(Obj2)) ).
 
+%%%_ * Conversion ------------------------------------------------------
+-spec to_map(object(A, B)) -> map(A, B).
+%% @doc to_map(Obj) returns a map representing the key-value associations of
+%% Obj.
+to_map(Obj) -> maps:from_list(to_list(Obj)).
+
+-spec to_dmap(object(A, B | object(C, D))) -> map(A, B | map(C, D)).
+%% @doc to_map(Obj) returns a map representing the key-value associations of
+%% Obj. For deeply nested objects, values are converted to maps recursively.
+to_dmap(Obj) -> maps:map(fun maybe_obj_to_map/2, to_map(Obj)).
+
+-spec from_map(map(A, B)) -> object(A, B).
+%% @doc from_map(Obj) returns an object representing the key-value
+%% associations of Map.
+from_map(Map) -> new(maps:to_list(Map)).
+
+-spec from_dmap(map(A, B | map(C, D))) -> object(A, B | object(C, D)).
+%% @doc from_dmap(Obj) returns an eon object representing the key-value
+%% associations of Map. For deeply nested maps, values are converted to
+%% objects recursively.
+from_dmap(Map) -> map(fun maybe_map_to_obj/1, from_map(Map)).
+
 %%%_ * Higher-order ----------------------------------------------------
 -spec all(func(boolean()), object(_, _)) -> boolean().
 %% @doc all(F, Obj) returns `true` if `F` evaluates to `true` for all
@@ -354,9 +385,6 @@ next([X|Xs])             -> {X, Xs}.
 done([])                 -> true;
 done([_|_])              -> false.
 
-
-%%%_* Private functions ================================================
-
 %%%_* Private functions ================================================
 normalize_deep_key(K) when is_binary(K) -> binary:split(K, <<".">>, [global]);
 normalize_deep_key(K) when is_list(K), not is_integer(hd(K)) -> K;
@@ -366,6 +394,19 @@ dsort([])                            -> [];
 dsort([{K, V} | T]) when is_list(V)  -> [{K, lists:sort(dsort(V))} | dsort(T)];
 dsort([H | T]) when is_list(H)       -> [lists:sort(dsort(H)) | dsort(T)];
 dsort([H | T])                       -> [H | dsort(T)].
+
+maybe_obj_to_map(_Key, Val) -> maybe_apply(fun to_dmap/1, Val).
+
+maybe_map_to_obj(Val) -> maybe_apply(fun from_dmap/1, Val).
+
+to_list(Obj) -> Obj.
+
+maybe_apply(F, Any) ->
+  try
+    F(Any)
+  catch
+    _:_ -> Any
+  end.
 
 %%%_* Tests ============================================================
 -ifdef(TEST).
@@ -380,6 +421,8 @@ new_test() ->
   _           = new([{foo, 42}, {bar, 666}]),
   _           = new([{foo, bar},baz]),
   _           = new([foo,42, bar,666]),
+  _           = new(#{}),
+  _           = new(#{foo => 42, bar => 666}),
   {'EXIT', _} = (catch new([foo,bar, baz])),
   {'EXIT', _} = (catch new(42)),
 
@@ -495,6 +538,35 @@ vals_test() ->
   Vs   = vals([foo,1, bar,2]),
   true = lists:member(1, Vs),
   true = lists:member(2, Vs).
+
+from_to_map_test() ->
+  Obj     = eon:new([{foo, 1}, {bar, 2}]),
+  SubObj  = eon:new([{baz, 2},
+                     {hello, eon:new([{hi, 3},
+                                      {hej, eon:new()}])}]),
+  DeepObj = eon:new([{foo, 1}, {bar, SubObj}]),
+
+  Map     = #{foo => 1, bar => 2},
+  SubMap  = #{baz => 2,
+              hello => #{hi => 3,
+                         hej => #{}}},
+  DeepMap = #{foo => 1, bar => SubMap},
+
+  %% from_map
+  ?assertObjEq(eon:new(), eon:from_map(#{})),
+  ?assertObjEq(Obj, eon:from_map(Map)),
+  ?assertObjEq(Obj, eon:from_dmap(Map)),
+  ?assertEqual(SubMap, eon:get_(eon:from_map(DeepMap), bar)),
+  ?assertEqual(SubMap, eon:get_(eon:new(DeepMap), bar)),
+  ?assertObjEq(DeepObj, eon:from_dmap(DeepMap)),
+  ?assertObjEq(DeepObj, eon:from_dmap(eon:to_dmap(DeepObj))),
+
+  % %% to_map
+  ?assertEqual(Map, eon:to_map(Obj)),
+  ?assertEqual(Map, eon:to_dmap(Obj)),
+  ?assertObjEq(SubObj, maps:get(bar, eon:to_map(DeepObj))),
+  ?assertEqual(DeepMap, eon:to_dmap(DeepObj)),
+  ?assertEqual(DeepMap, eon:to_dmap(eon:from_dmap(DeepMap))).
 
 with_test() ->
   ?assertObjEq(eon:new([foo,1, bar,2]),
